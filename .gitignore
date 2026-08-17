@@ -1,0 +1,43 @@
+# Package directories
+node_modules/
+jspm_packages/
+web_modules/
+
+# Python virtual envs
+venv/
+.venv/
+env/
+ENV/
+pyenv/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Build outputs
+dist/
+build/
+out/
+
+# Local configuration / secrets
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Tunnels / Temp binaries
+ngrok
+ngrok.exe
+crickettunnel.exe
+*.zip
+*.log
+
+# Large local datasets and database files
+Archive/
+*.db
