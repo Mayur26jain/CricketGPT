@@ -2,7 +2,7 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://cricketgpt-backend.onrender.com/api/:path*"
+      "destination": "https://cricketgpt.onrender.com/api/:path*"
     }
   ]
 }
