@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid, Legend } from 'recharts'
 import { ArrowLeft, Activity, CloudSun, Calendar, MessageSquare, ShieldAlert, Award, Sparkles } from 'lucide-react'
 
 export default function MatchCenter() {
+  const [searchParams] = useSearchParams()
   const [matchesList, setMatchesList] = useState<any[]>([])
   const [selectedMatchId, setSelectedMatchId] = useState<number>(1)
   const [match, setMatch] = useState<any>(null)
