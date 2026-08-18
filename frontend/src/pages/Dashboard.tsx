@@ -86,7 +86,7 @@ export default function Dashboard() {
         </div>
         <Link
           to="/chat"
-          className="flex items-center space-x-2 px-4 py-2.5 rounded-xl text-sm font-semibold bg-gradient-to-r from-primary-600 to-indigo-600 hover:from-primary-500 hover:to-indigo-500 text-white shadow-lg shadow-primary-500/10 transition-all duration-200"
+          className="flex items-center space-x-2 px-4 py-2.5 rounded-xl text-sm font-semibold bg-gradient-to-r from-primary-600 to-teal-600 hover:from-primary-500 hover:to-teal-500 text-white shadow-lg shadow-primary-500/10 transition-all duration-200"
         >
           <MessageSquare className="h-4 w-4" />
           <span>Ask AI Assistant</span>

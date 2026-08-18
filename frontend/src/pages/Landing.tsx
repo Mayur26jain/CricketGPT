@@ -8,12 +8,12 @@ export default function Landing() {
       
       {/* Background ambient glows */}
       <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] bg-primary-600/10 rounded-full blur-[120px] pointer-events-none" />
-      <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-pink-500/10 rounded-full blur-[120px] pointer-events-none" />
+      <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-emerald-500/10 rounded-full blur-[120px] pointer-events-none" />
 
       {/* Header */}
       <header className="max-w-7xl mx-auto w-full px-6 py-6 flex justify-between items-center border-b border-zinc-950 relative z-10">
         <div className="flex items-center space-x-2">
-          <div className="bg-gradient-to-tr from-primary-600 to-pink-500 p-2 rounded-xl text-white shadow-lg glow-indigo">
+          <div className="bg-gradient-to-tr from-primary-600 to-emerald-500 p-2 rounded-xl text-white shadow-lg glow-indigo">
             <Trophy className="h-5 w-5" />
           </div>
           <span className="text-xl font-bold font-sans tracking-tight bg-gradient-to-r from-white to-zinc-400 bg-clip-text text-transparent">
@@ -40,7 +40,7 @@ export default function Landing() {
         {/* Hero Title */}
         <h1 className="text-5xl md:text-7xl font-extrabold tracking-tight font-sans mb-6 max-w-4xl leading-tight">
           The AI-Powered Intelligence Platform for{' '}
-          <span className="bg-gradient-to-r from-primary-500 via-purple-500 to-pink-500 bg-clip-text text-transparent">
+          <span className="bg-gradient-to-r from-primary-400 via-emerald-400 to-teal-400 bg-clip-text text-transparent">
             Cricket Stats
           </span>
         </h1>
@@ -54,7 +54,7 @@ export default function Landing() {
         <div className="flex flex-col sm:flex-row items-center gap-4 mb-16">
           <Link
             to="/auth"
-            className="flex items-center space-x-2 px-8 py-4 rounded-xl text-base font-semibold bg-gradient-to-r from-primary-600 to-indigo-600 hover:from-primary-500 hover:to-indigo-500 text-white shadow-lg shadow-primary-500/20 transform hover:-translate-y-0.5 transition-all duration-200"
+            className="flex items-center space-x-2 px-8 py-4 rounded-xl text-base font-semibold bg-gradient-to-r from-primary-600 to-teal-600 hover:from-primary-500 hover:to-teal-500 text-white shadow-lg shadow-primary-500/20 transform hover:-translate-y-0.5 transition-all duration-200"
           >
             <span>Launch Platform</span>
             <ArrowRight className="h-4.5 w-4.5" />

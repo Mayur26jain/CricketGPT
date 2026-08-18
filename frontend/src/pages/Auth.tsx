@@ -76,7 +76,7 @@ export default function Auth() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-3.5 px-4 rounded-xl text-sm font-semibold bg-gradient-to-r from-primary-600 to-indigo-600 hover:from-primary-500 hover:to-indigo-500 text-white shadow-lg transition-all duration-200 flex items-center justify-center space-x-2 transform hover:-translate-y-0.5"
+              className="w-full py-3.5 px-4 rounded-xl text-sm font-semibold bg-gradient-to-r from-primary-600 to-teal-600 hover:from-primary-500 hover:to-teal-500 text-white shadow-lg transition-all duration-200 flex items-center justify-center space-x-2 transform hover:-translate-y-0.5"
             >
               <span>{loading ? "Authenticating..." : "Sign In"}</span>
               <ArrowRight className="h-4 w-4" />

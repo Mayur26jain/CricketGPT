@@ -492,7 +492,7 @@ export default function MatchCenter() {
             </div>
             <Link
               to={`/chat?q=Give me a complete AI prediction and tactical review of the ${match.team_home.name} vs ${match.team_away.name} live match based on the current score of ${match.team_home.score} after ${match.team_home.overs} overs.`}
-              className="px-5 py-3 rounded-xl bg-gradient-to-r from-primary-600 to-indigo-600 hover:from-primary-500 hover:to-indigo-500 text-white font-semibold text-xs transition-all shadow-lg flex items-center space-x-2"
+              className="px-5 py-3 rounded-xl bg-gradient-to-r from-primary-600 to-teal-600 hover:from-primary-500 hover:to-teal-500 text-white font-semibold text-xs transition-all shadow-lg flex items-center space-x-2"
             >
               <Sparkles className="h-4 w-4" />
               <span>Launch AI In-depth Review</span>
