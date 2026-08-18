@@ -41,3 +41,4 @@ crickettunnel.exe
 # Large local datasets and database files
 Archive/
 *.db
+load_ipl_output.txt
