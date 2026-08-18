@@ -62,11 +62,11 @@ html, body, #root {
 }
 
 .glow-indigo {
-  box-shadow: 0 0 40px -5px rgba(79, 115, 255, 0.15);
+  box-shadow: 0 0 40px -5px rgba(16, 185, 129, 0.2);
 }
 
 .glow-pink {
-  box-shadow: 0 0 40px -5px rgba(219, 39, 119, 0.15);
+  box-shadow: 0 0 40px -5px rgba(244, 63, 94, 0.15);
 }
 
 /* Subtle dot grid pattern background */
@@ -83,7 +83,7 @@ html, body, #root {
 }
 
 .premium-input:focus {
-  border-color: #4f73ff;
-  box-shadow: 0 0 0 2px rgba(79, 115, 255, 0.2);
+  border-color: #10b981;
+  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2);
   outline: none;
 }

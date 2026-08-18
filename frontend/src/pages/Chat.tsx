@@ -139,8 +139,19 @@ export default function Chat() {
     setMessages(prev => [...prev, userMsg])
     
     // Build robust ws target host mapping
-    const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsHost = window.location.host.includes('3000') ? window.location.host.replace('3000', '8001') : window.location.host;
+    let wsHost = window.location.host;
+    let wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    
+    if (wsHost.includes('localhost') || wsHost.includes('127.0.0.1')) {
+      if (wsHost.includes('5173')) {
+        wsHost = wsHost.replace('5173', '8001');
+      } else if (wsHost.includes('3000')) {
+        wsHost = wsHost.replace('3000', '8001');
+      }
+    } else {
+      wsHost = 'cricketgpt.onrender.com';
+      wsProtocol = 'wss:';
+    }
     const wsUrl = `${wsProtocol}//${wsHost}/api/v1/chat/ws/${targetConvId}`;
     
     const socket = new WebSocket(wsUrl)
