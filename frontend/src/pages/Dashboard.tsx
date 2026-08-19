@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar } from 'recharts'
-import { Trophy, Activity, CloudSun, FileText, ChevronRight, MessageSquare } from 'lucide-react'
+import { Trophy, Activity, CloudSun, FileText, ChevronRight, MessageSquare, RefreshCw } from 'lucide-react'
 
 export default function Dashboard() {
   const [liveScores, setLiveScores] = useState<any[]>([])
@@ -9,6 +9,34 @@ export default function Dashboard() {
   const [weather, setWeather] = useState<any>(null)
   const [weatherVenue, setWeatherVenue] = useState("Colombo (R. Premadasa)")
   const [loading, setLoading] = useState(true)
+  const [syncing, setSyncing] = useState(false)
+  const [syncMessage, setSyncMessage] = useState("Sync Live Data")
+
+  const handleSync = async () => {
+    setSyncing(true)
+    setSyncMessage("Syncing...")
+    try {
+      const res = await fetch("/api/v1/matches/sync", { method: "POST" })
+      if (res.ok) {
+        setSyncMessage("Synced Successfully!")
+        const scoresRes = await fetch("/api/v1/matches/live")
+        if (scoresRes.ok) {
+          const scores = await scoresRes.json()
+          setLiveScores(scores)
+        }
+      } else {
+        setSyncMessage("Sync Failed (Check Key)")
+      }
+    } catch (e) {
+      console.error(e)
+      setSyncMessage("Error Syncing")
+    } finally {
+      setTimeout(() => {
+        setSyncing(false)
+        setSyncMessage("Sync Live Data")
+      }, 2500)
+    }
+  }
 
   useEffect(() => {
     // Fetch live scores, news, and weather in parallel
@@ -84,13 +112,23 @@ export default function Dashboard() {
           <h1 className="text-3xl font-extrabold tracking-tight text-white font-sans">Analytical Dashboard</h1>
           <p className="text-sm text-zinc-400 mt-1">Real-time match data, weather widgets, and historical statistics</p>
         </div>
-        <Link
-          to="/chat"
-          className="flex items-center space-x-2 px-4 py-2.5 rounded-xl text-sm font-semibold bg-gradient-to-r from-primary-600 to-teal-600 hover:from-primary-500 hover:to-teal-500 text-white shadow-lg shadow-primary-500/10 transition-all duration-200"
-        >
-          <MessageSquare className="h-4 w-4" />
-          <span>Ask AI Assistant</span>
-        </Link>
+        <div className="flex items-center space-x-3">
+          <button
+            onClick={handleSync}
+            disabled={syncing}
+            className="flex items-center space-x-2 px-4 py-2.5 rounded-xl text-sm font-semibold border border-zinc-800 bg-zinc-900/60 hover:bg-zinc-800 text-zinc-300 disabled:opacity-50 transition-all duration-200"
+          >
+            <RefreshCw className={`h-4 w-4 ${syncing ? 'animate-spin text-primary-400' : ''}`} />
+            <span>{syncMessage}</span>
+          </button>
+          <Link
+            to="/chat"
+            className="flex items-center space-x-2 px-4 py-2.5 rounded-xl text-sm font-semibold bg-gradient-to-r from-primary-600 to-teal-600 hover:from-primary-500 hover:to-teal-500 text-white shadow-lg shadow-primary-500/10 transition-all duration-200"
+          >
+            <MessageSquare className="h-4 w-4" />
+            <span>Ask AI Assistant</span>
+          </Link>
+        </div>
       </div>
 
       {/* Main Grid */}

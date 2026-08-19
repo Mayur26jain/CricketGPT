@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -6,6 +6,7 @@ from app.core.database import get_db
 from app.models.cricket import Match
 from app.schemas.stats import MatchResponse
 from app.services.external_apis import ExternalAPIService
+from app.services.sync_matches import sync_daily_matches
 from typing import List
 
 router = APIRouter()
@@ -17,6 +18,11 @@ async def list_matches(db: AsyncSession = Depends(get_db)):
         .options(selectinload(Match.team_home), selectinload(Match.team_away))
     )
     return list(result.scalars().all())
+
+@router.post("/sync")
+async def trigger_match_sync(background_tasks: BackgroundTasks):
+    background_tasks.add_task(sync_daily_matches)
+    return {"status": "Sync triggered in background"}
 
 @router.get("/live")
 async def get_live_scores_summary():

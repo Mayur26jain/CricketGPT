@@ -225,10 +225,92 @@ class ExternalAPIService:
             url = f"https://api.cricapi.com/v1/currentMatches?apikey={settings.CRICAPI_KEY}"
             response = requests.get(url, timeout=5)
             if response.status_code == 200:
-                data = response.json()
-                return data.get("data", [])
+                raw_data = response.json()
+                raw_matches = raw_data.get("data", [])
+                
+                mapped_matches = []
+                for idx, m in enumerate(raw_matches):
+                    teams = m.get("teams", [])
+                    team_home = teams[0] if len(teams) >= 1 else "TBA"
+                    team_away = teams[1] if len(teams) >= 2 else "TBA"
+                    
+                    # Determine status
+                    raw_status = m.get("status", "").lower()
+                    status_str = "Upcoming"
+                    if "won" in raw_status or "draw" in raw_status or "abandoned" in raw_status or m.get("matchEnded"):
+                        status_str = "Completed"
+                    elif m.get("matchStarted"):
+                        status_str = "Live"
+                        
+                    # Parse scores
+                    scores = {
+                        "team_home_runs": 0,
+                        "team_home_wickets": 0,
+                        "team_home_overs": 0.0,
+                        "team_away_runs": 0,
+                        "team_away_wickets": 0,
+                        "team_away_overs": 0.0
+                    }
+                    
+                    raw_scores = m.get("score", [])
+                    if isinstance(raw_scores, list) and len(raw_scores) > 0:
+                        for inning in raw_scores:
+                            inn_name = inning.get("inning", "").lower()
+                            runs = inning.get("r", 0)
+                            wickets = inning.get("w", 0)
+                            overs = inning.get("o", 0.0)
+                            
+                            if team_home.lower() in inn_name:
+                                scores["team_home_runs"] = runs
+                                scores["team_home_wickets"] = wickets
+                                scores["team_home_overs"] = overs
+                            elif team_away.lower() in inn_name:
+                                scores["team_away_runs"] = runs
+                                scores["team_away_wickets"] = wickets
+                                scores["team_away_overs"] = overs
+                        
+                        # Sequential fallback
+                        if scores["team_home_runs"] == 0 and scores["team_away_runs"] == 0:
+                            for s_idx, inning in enumerate(raw_scores[:2]):
+                                runs = inning.get("r", 0)
+                                wickets = inning.get("w", 0)
+                                overs = inning.get("o", 0.0)
+                                if s_idx == 0:
+                                    scores["team_home_runs"] = runs
+                                    scores["team_home_wickets"] = wickets
+                                    scores["team_home_overs"] = overs
+                                elif s_idx == 1:
+                                    scores["team_away_runs"] = runs
+                                    scores["team_away_wickets"] = wickets
+                                    scores["team_away_overs"] = overs
+                                    
+                    match_id = m.get("id")
+                    if isinstance(match_id, str):
+                        try:
+                            numeric_id = int(hashlib.md5(match_id.encode()).hexdigest(), 16) % 1000000
+                        except:
+                            numeric_id = idx + 1
+                    else:
+                        numeric_id = match_id or (idx + 1)
+                        
+                    mapped_matches.append({
+                        "id": numeric_id,
+                        "match_type": m.get("matchType", "T20").upper(),
+                        "status": status_str,
+                        "team_home": team_home,
+                        "team_away": team_away,
+                        "venue": m.get("venue", "Unknown Venue"),
+                        "scores": scores,
+                        "current_batsmen": [],
+                        "current_bowler": None,
+                        "timeline": [m.get("status", "Match is active")] if status_str == "Live" else [],
+                        "target": None
+                    })
+                
+                if mapped_matches:
+                    return mapped_matches
         except Exception as e:
-            print(f"CricAPI fetch failed: {e}")
+            print(f"CricAPI fetch/parsing failed: {e}")
         return []
 
     @staticmethod
@@ -473,15 +555,112 @@ class ExternalAPIService:
                 ]
             }
         
-        try:
-            url = f"https://api.cricapi.com/v1/currentMatches?apikey={settings.CRICAPI_KEY}"
-            response = requests.get(url, timeout=5)
-            if response.status_code == 200:
-                data = response.json()
-                return data.get("data", [])
-        except Exception as e:
-            print(f"CricAPI fetch failed: {e}")
-        return []
+        if settings.CRICAPI_KEY:
+            try:
+                # 1. Fetch current matches to find the UUID mapping
+                url = f"https://api.cricapi.com/v1/currentMatches?apikey={settings.CRICAPI_KEY}"
+                response = requests.get(url, timeout=5)
+                if response.status_code == 200:
+                    raw_data = response.json()
+                    raw_matches = raw_data.get("data", [])
+                    
+                    target_uuid = None
+                    target_match = None
+                    for idx, m in enumerate(raw_matches):
+                        m_id = m.get("id")
+                        if isinstance(m_id, str):
+                            try:
+                                numeric_id = int(hashlib.md5(m_id.encode()).hexdigest(), 16) % 1000000
+                            except:
+                                numeric_id = idx + 1
+                        else:
+                            numeric_id = m_id or (idx + 1)
+                            
+                        if numeric_id == match_id:
+                            target_uuid = m_id
+                            target_match = m
+                            break
+                            
+                    if target_uuid:
+                        # 2. Query detailed match info
+                        detail_url = f"https://api.cricapi.com/v1/match_info?apikey={settings.CRICAPI_KEY}&id={target_uuid}"
+                        detail_res = requests.get(detail_url, timeout=5)
+                        if detail_res.status_code == 200:
+                            detail_data = detail_res.json().get("data", {})
+                            
+                            teams = target_match.get("teams", [])
+                            team_home = teams[0] if len(teams) >= 1 else "TBA"
+                            team_away = teams[1] if len(teams) >= 2 else "TBA"
+                            
+                            raw_scores = target_match.get("score", [])
+                            scores_home = "Yet to bat"
+                            scores_away = "Yet to bat"
+                            overs_home = "0.0"
+                            overs_away = "0.0"
+                            
+                            for inning in raw_scores:
+                                inn_name = inning.get("inning", "").lower()
+                                runs = inning.get("r", 0)
+                                wickets = inning.get("w", 0)
+                                overs = inning.get("o", 0.0)
+                                score_str = f"{runs}/{wickets}"
+                                if team_home.lower() in inn_name:
+                                    scores_home = score_str
+                                    overs_home = str(overs)
+                                elif team_away.lower() in inn_name:
+                                    scores_away = score_str
+                                    overs_away = str(overs)
+                                    
+                            # Fallback
+                            if scores_home == "Yet to bat" and scores_away == "Yet to bat" and len(raw_scores) > 0:
+                                for s_idx, inning in enumerate(raw_scores[:2]):
+                                    score_str = f"{inning.get('r', 0)}/{inning.get('w', 0)}"
+                                    if s_idx == 0:
+                                        scores_home = score_str
+                                        overs_home = str(inning.get("o", 0.0))
+                                    elif s_idx == 1:
+                                        scores_away = score_str
+                                        overs_away = str(inning.get("o", 0.0))
+                                        
+                            return {
+                                "id": match_id,
+                                "match_type": target_match.get("matchType", "T20").upper(),
+                                "status": "Live" if target_match.get("matchStarted") and not target_match.get("matchEnded") else "Completed" if target_match.get("matchEnded") else "Upcoming",
+                                "team_home": {
+                                    "name": team_home,
+                                    "short_name": team_home[:3].upper(),
+                                    "score": scores_home,
+                                    "overs": overs_home,
+                                    "run_rate": "0.00",
+                                    "innings": [],
+                                    "bowlers": []
+                                },
+                                "team_away": {
+                                    "name": team_away,
+                                    "short_name": team_away[:3].upper(),
+                                    "score": scores_away,
+                                    "overs": overs_away,
+                                    "run_rate": "0.00",
+                                    "innings": [],
+                                    "bowlers": []
+                                },
+                                "venue": target_match.get("venue", "Unknown Venue"),
+                                "weather": {
+                                    "temp": 25.0,
+                                    "condition": "Clear / Fine",
+                                    "humidity": 65,
+                                    "rain_prob": "10%"
+                                },
+                                "commentary": [{"ball": "Active", "description": target_match.get("status", "Match active"), "runs": 0, "event": "info"}],
+                                "win_probability": {
+                                    "home": 50.0,
+                                    "away": 50.0
+                                },
+                                "stats_comparison": []
+                            }
+            except Exception as e:
+                print(f"CricAPI detailed fetch failed: {e}")
+        return {}
 
     @staticmethod
     def get_ball_by_ball(match_id: int) -> List[str]:
