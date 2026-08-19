@@ -126,6 +126,10 @@ export default function Chat() {
     if (!targetConvId) return;
 
     if (socketRef.current) {
+      socketRef.current.onopen = null
+      socketRef.current.onmessage = null
+      socketRef.current.onerror = null
+      socketRef.current.onclose = null
       socketRef.current.close()
     }
 
