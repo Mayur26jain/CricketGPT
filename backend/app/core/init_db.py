@@ -62,9 +62,10 @@ async def seed_data(db):
         db.add_all(stats)
         await db.flush()
 
-    # Clear and overwrite the Matches table to ensure sync with active feed
-    await db.execute(delete(Match))
-    await db.flush()
+    # IMPORTANT:
+    # Never delete historical matches here.
+    # Historical matches are managed by the Cricket data loader.
+    # Demo/live matches are added only if their IDs do not already exist.
 
     # Dynamic team lookups to avoid collision with existing database team IDs
     async def get_or_create_team_id(name: str, short_name: str, team_type: str = "National") -> int:
@@ -112,7 +113,15 @@ async def seed_data(db):
         Match(id=9, match_type="Test", team_home_id=eng_id, team_away_id=sa_id, status="Completed", result="England won by 115 runs", match_date=date(2026, 8, 8), venue="Lord's, London"),
         Match(id=10, match_type="T20", team_home_id=gt_id, team_away_id=rr_id, status="Completed", result="Rajasthan Royals won by 3 wickets", match_date=date(2026, 8, 7), venue="Narendra Modi Stadium, Ahmedabad")
     ]
-    db.add_all(matches_to_seed)
+    # Add demo matches only when they do not already exist.
+    # Never overwrite/delete historical CricketGPT matches.
+    for match in matches_to_seed:
+        res_match = await db.execute(
+            select(Match).filter(Match.id == match.id)
+        )
+        if not res_match.scalars().first():
+            db.add(match)
+
     await db.flush()
     
     # Seed a Demo User if none exists

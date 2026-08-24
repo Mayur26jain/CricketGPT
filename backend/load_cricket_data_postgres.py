@@ -3,12 +3,18 @@ import sys
 import asyncio
 import time
 from datetime import datetime
+from dotenv import load_dotenv
 from sqlalchemy.future import select
 
 # Add parent directory to sys.path to enable app module imports
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+load_dotenv(os.path.join(PROJECT_ROOT, '.env'), override=True)
 sys.path.insert(0, os.path.join(PROJECT_ROOT, "backend"))
 
+os.environ["USE_SQLITE"] = "false"
+os.environ["DATABASE_URL"] = "postgresql+asyncpg://postgres:postgres@localhost:5432/cricketgpt"
+os.environ["USE_SQLITE"] = "false"
+os.environ["DATABASE_URL"] = "postgresql+asyncpg://postgres:postgres@localhost:5432/cricketgpt"
 from app.core.database import AsyncSessionLocal, engine
 from app.models.cricket import Team, Player, PlayerStats, MatchupCache, Match
 
@@ -37,6 +43,7 @@ IPL_SHORT_NAMES = {
 }
 
 def get_short_name(team_name):
+# Cricsheet often uses initials, while the database uses full names.
     if team_name in IPL_SHORT_NAMES:
         return IPL_SHORT_NAMES[team_name]
     words = team_name.split()
@@ -55,7 +62,6 @@ def parse_match_info(filepath):
         "result": None,
         "match_type": "T20"
     }
-    
     with open(filepath, "r", encoding="utf-8") as f:
         lines = f.readlines()
         
@@ -282,7 +288,15 @@ async def main():
     print(f"Loaded {len(teams_db)} teams and {len(players_db)} players from database.")
     
     BATCH_SIZE = 500
+
+    load_limit = int(os.getenv("CRICKET_LOAD_LIMIT", "0"))
+
+    if load_limit > 0:
+        files = files[:load_limit]
+
     total_files = len(files)
+
+    print(f"Files selected for loading: {total_files}")
     
     for chunk_start in range(0, total_files, BATCH_SIZE):
         chunk_files = files[chunk_start:chunk_start + BATCH_SIZE]
@@ -341,8 +355,8 @@ async def main():
                 match_stats[p] = {
                     "runs_scored": 0, "balls_faced": 0, "dismissed": False, "fours": 0, "sixes": 0, "dots": 0, "batted": False,
                     "runs_conceded": 0, "balls_bowled": 0, "wickets": 0, "bowled": False
-                }
                 
+                }
             for d in deliveries:
                 batsman = d["batsman"]
                 bowler = d["bowler"]
@@ -418,7 +432,12 @@ async def main():
                         "best_bowling_w": 0, "best_bowling_r": 999
                     }
                 g = batch_player_stats[p_key]
-                g["matches_played"] += 1
+
+                # Count a match only when the player actually appears
+                # in the recorded ball-by-ball activity.
+                if ms["batted"] or ms["bowled"]:
+                    g["matches_played"] += 1
+
                 if ms["batted"]:
                     g["innings_batted"] += 1
                     g["runs_scored"] += ms["runs_scored"]
@@ -556,92 +575,291 @@ async def main():
                             )
                             session.add(new_m)
                             
-                # Sync Player Stats (SQLAlchemy Dialect-Agnostic Bulk Fetch -> Merge -> Save)
+                # Sync Player Stats
+                #
+                # IMPORTANT:
+                # Raw totals are stored directly in PostgreSQL.
+                # We never reconstruct raw totals from batting average,
+                # strike rate, bowling average, or economy rate.
+
                 if batch_player_stats:
-                    batch_player_ids = list({players_db[k[0]] for k in batch_player_stats.keys() if k[0] in players_db})
-                    
+
+                    batch_player_ids = list({
+                        players_db[k[0]]
+                        for k in batch_player_stats.keys()
+                        if k[0] in players_db
+                    })
+
                     existing_stats = {}
+
                     if batch_player_ids:
                         res = await session.execute(
-                            select(PlayerStats).where(PlayerStats.player_id.in_(batch_player_ids))
+                            select(PlayerStats).where(
+                                PlayerStats.player_id.in_(batch_player_ids)
+                            )
                         )
+
                         for db_g in res.scalars().all():
                             existing_stats[(db_g.player_id, db_g.format)] = db_g
-                            
+
                     for (p_name, fmt), ms in batch_player_stats.items():
+
                         pid = players_db.get(p_name)
+
                         if not pid:
                             continue
-                            
+
                         key = (pid, fmt)
+
                         if key in existing_stats:
+
                             db_g = existing_stats[key]
-                            runs_sc = db_g.runs_scored
-                            avg = db_g.batting_average
-                            sr = db_g.strike_rate
-                            wkts = db_g.wickets_taken
-                            bowl_avg = db_g.bowling_average
-                            econ = db_g.economy_rate
-                            
-                            dismissals = int(round(runs_sc / avg)) if (avg and avg > 0) else 0
-                            balls_faced = int(round((runs_sc / sr) * 100)) if (sr and sr > 0) else 0
-                            runs_conceded = int(round(wkts * bowl_avg)) if (bowl_avg and bowl_avg > 0) else 0
-                            balls_bowled = int(round((runs_conceded / econ) * 6)) if (econ and econ > 0) else 0
-                            
-                            matches_played = db_g.matches_played + ms["matches_played"]
-                            innings_batted = db_g.innings_batted + ms["innings_batted"]
-                            runs_scored = db_g.runs_scored + ms["runs_scored"]
-                            highest_score = max(db_g.highest_score, ms["highest_score"])
-                            dismissals_total = dismissals + ms["dismissals_total"]
-                            balls_faced_total = balls_faced + ms["balls_faced_total"]
-                            centuries = db_g.centuries + ms["centuries"]
-                            half_centuries = db_g.half_centuries + ms["half_centuries"]
-                            wickets_taken = db_g.wickets_taken + ms["wickets_taken"]
-                            runs_conceded_total = runs_conceded + ms["runs_conceded_total"]
-                            balls_bowled_total = balls_bowled + ms["balls_bowled_total"]
-                            
-                            current_best = db_g.best_bowling
-                            cb_w, cb_r = 0, 999
+
+                            # -----------------------------
+                            # Merge RAW totals
+                            # -----------------------------
+
+                            matches_played = (
+                                (db_g.matches_played or 0)
+                                + ms["matches_played"]
+                            )
+
+                            innings_batted = (
+                                (db_g.innings_batted or 0)
+                                + ms["innings_batted"]
+                            )
+
+                            runs_scored = (
+                                (db_g.runs_scored or 0)
+                                + ms["runs_scored"]
+                            )
+
+                            dismissals_total = (
+                                (db_g.dismissals_total or 0)
+                                + ms["dismissals_total"]
+                            )
+
+                            balls_faced_total = (
+                                (db_g.balls_faced_total or 0)
+                                + ms["balls_faced_total"]
+                            )
+
+                            wickets_taken = (
+                                (db_g.wickets_taken or 0)
+                                + ms["wickets_taken"]
+                            )
+
+                            runs_conceded_total = (
+                                (db_g.runs_conceded_total or 0)
+                                + ms["runs_conceded_total"]
+                            )
+
+                            balls_bowled_total = (
+                                (db_g.balls_bowled_total or 0)
+                                + ms["balls_bowled_total"]
+                            )
+
+                            highest_score = max(
+                                db_g.highest_score or 0,
+                                ms["highest_score"]
+                            )
+
+                            centuries = (
+                                (db_g.centuries or 0)
+                                + ms["centuries"]
+                            )
+
+                            half_centuries = (
+                                (db_g.half_centuries or 0)
+                                + ms["half_centuries"]
+                            )
+
+                            # -----------------------------
+                            # Best bowling
+                            # -----------------------------
+
+                            current_best = db_g.best_bowling or "0/0"
+
+                            current_w = 0
+                            current_r = 999
+
                             if "/" in current_best:
                                 try:
-                                    cb_w = int(current_best.split("/")[0])
-                                    cb_r = int(current_best.split("/")[1])
-                                    
-                                except Exception:
-                                    pass
-                            if ms["best_bowling_w"] > cb_w or (ms["best_bowling_w"] == cb_w and ms["best_bowling_r"] < cb_r):
-                                best_bowling = f"{ms['best_bowling_w']}/{ms['best_bowling_r']}"
-                            else:
-                                best_bowling = current_best
-                                
+                                    current_w = int(
+                                        current_best.split("/")[0]
+                                    )
+                                    current_r = int(
+                                        current_best.split("/")[1]
+                                    )
+                                except (ValueError, IndexError):
+                                    current_w = 0
+                                    current_r = 999
+
+                            best_bowling = current_best
+
+                            new_w = ms["best_bowling_w"]
+                            new_r = ms["best_bowling_r"]
+
+                            if new_w > 0:
+                                if (
+                                    new_w > current_w
+                                    or (
+                                        new_w == current_w
+                                        and new_r < current_r
+                                    )
+                                ):
+                                    best_bowling = f"{new_w}/{new_r}"
+
+                            # -----------------------------
+                            # Save RAW totals
+                            # -----------------------------
+
                             db_g.matches_played = matches_played
                             db_g.innings_batted = innings_batted
                             db_g.runs_scored = runs_scored
                             db_g.highest_score = highest_score
+
+                            db_g.dismissals_total = dismissals_total
+                            db_g.balls_faced_total = balls_faced_total
+
                             db_g.centuries = centuries
                             db_g.half_centuries = half_centuries
+
                             db_g.wickets_taken = wickets_taken
+                            db_g.runs_conceded_total = runs_conceded_total
+                            db_g.balls_bowled_total = balls_bowled_total
+
                             db_g.best_bowling = best_bowling
-                            
-                            db_g.batting_average = round(runs_scored / dismissals_total, 2) if dismissals_total > 0 else float(runs_scored)
-                            db_g.strike_rate = round((runs_scored / balls_faced_total) * 100, 2) if balls_faced_total > 0 else 0.0
-                            db_g.bowling_average = round(runs_conceded_total / wickets_taken, 2) if wickets_taken > 0 else 0.0
-                            db_g.economy_rate = round((runs_conceded_total / balls_bowled_total) * 6, 2) if balls_bowled_total > 0 else 0.0
-                        else:
-                            new_g = PlayerStats(
-                                player_id=pid, format=fmt,
-                                matches_played=ms["matches_played"], innings_batted=ms["innings_batted"],
-                                runs_scored=ms["runs_scored"], highest_score=ms["highest_score"],
-                                batting_average=round(ms["runs_scored"] / ms["dismissals_total"], 2) if ms["dismissals_total"] > 0 else float(ms["runs_scored"]),
-                                strike_rate=round((ms["runs_scored"] / ms["balls_faced_total"]) * 100, 2) if ms["balls_faced_total"] > 0 else 0.0,
-                                centuries=ms["centuries"], half_centuries=ms["half_centuries"],
-                                wickets_taken=ms["wickets_taken"],
-                                bowling_average=round(ms["runs_conceded_total"] / ms["wickets_taken"], 2) if ms["wickets_taken"] > 0 else 0.0,
-                                economy_rate=round((ms["runs_conceded_total"] / ms["balls_bowled_total"]) * 6, 2) if ms["balls_bowled_total"] > 0 else 0.0,
-                                best_bowling=f"{ms['best_bowling_w']}/{ms['best_bowling_r']}"
+
+                            # -----------------------------
+                            # Calculate DERIVED statistics
+                            # -----------------------------
+
+                            db_g.batting_average = (
+                                round(
+                                    runs_scored / dismissals_total,
+                                    2
+                                )
+                                if dismissals_total > 0
+                                else float(runs_scored)
                             )
+
+                            db_g.strike_rate = (
+                                round(
+                                    (runs_scored / balls_faced_total) * 100,
+                                    2
+                                )
+                                if balls_faced_total > 0
+                                else 0.0
+                            )
+
+                            db_g.bowling_average = (
+                                round(
+                                    runs_conceded_total / wickets_taken,
+                                    2
+                                )
+                                if wickets_taken > 0
+                                else 0.0
+                            )
+
+                            db_g.economy_rate = (
+                                round(
+                                    (runs_conceded_total / balls_bowled_total) * 6,
+                                    2
+                                )
+                                if balls_bowled_total > 0
+                                else 0.0
+                            )
+
+                        else:
+
+                            # -----------------------------
+                            # New PlayerStats row
+                            # -----------------------------
+
+                            batting_average = (
+                                round(
+                                    ms["runs_scored"]
+                                    / ms["dismissals_total"],
+                                    2
+                                )
+                                if ms["dismissals_total"] > 0
+                                else float(ms["runs_scored"])
+                            )
+
+                            strike_rate = (
+                                round(
+                                    (
+                                        ms["runs_scored"]
+                                        / ms["balls_faced_total"]
+                                    ) * 100,
+                                    2
+                                )
+                                if ms["balls_faced_total"] > 0
+                                else 0.0
+                            )
+
+                            bowling_average = (
+                                round(
+                                    ms["runs_conceded_total"]
+                                    / ms["wickets_taken"],
+                                    2
+                                )
+                                if ms["wickets_taken"] > 0
+                                else 0.0
+                            )
+
+                            economy_rate = (
+                                round(
+                                    (
+                                        ms["runs_conceded_total"]
+                                        / ms["balls_bowled_total"]
+                                    ) * 6,
+                                    2
+                                )
+                                if ms["balls_bowled_total"] > 0
+                                else 0.0
+                            )
+
+                            if ms["best_bowling_w"] > 0:
+                                best_bowling = (
+                                    f"{ms['best_bowling_w']}/"
+                                    f"{ms['best_bowling_r']}"
+                                )
+                            else:
+                                best_bowling = "0/0"
+
+                            new_g = PlayerStats(
+                                player_id=pid,
+                                format=fmt,
+
+                                matches_played=ms["matches_played"],
+                                innings_batted=ms["innings_batted"],
+
+                                runs_scored=ms["runs_scored"],
+                                highest_score=ms["highest_score"],
+
+                                dismissals_total=ms["dismissals_total"],
+                                balls_faced_total=ms["balls_faced_total"],
+
+                                batting_average=batting_average,
+                                strike_rate=strike_rate,
+
+                                centuries=ms["centuries"],
+                                half_centuries=ms["half_centuries"],
+
+                                wickets_taken=ms["wickets_taken"],
+                                runs_conceded_total=ms["runs_conceded_total"],
+                                balls_bowled_total=ms["balls_bowled_total"],
+
+                                bowling_average=bowling_average,
+                                economy_rate=economy_rate,
+
+                                best_bowling=best_bowling
+                            )
+
                             session.add(new_g)
-                            
+
                 # Commits automatically on block exit
                 
         progress_end = min(chunk_start + BATCH_SIZE, total_files)
@@ -655,3 +873,8 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
+
+
+
+
