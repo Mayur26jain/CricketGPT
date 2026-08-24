@@ -34,11 +34,24 @@ class PlayerStats(Base):
     innings_batted = Column(Integer, default=0)
     runs_scored = Column(Integer, default=0)
     highest_score = Column(Integer, default=0)
+    
+    # Raw batting totals
+    dismissals_total = Column(Integer, default=0)
+    balls_faced_total = Column(Integer, default=0)
+    
+    # Derived batting statistics
     batting_average = Column(Float, default=0.0)
     strike_rate = Column(Float, default=0.0)
+    
     centuries = Column(Integer, default=0)
     half_centuries = Column(Integer, default=0)
     wickets_taken = Column(Integer, default=0)
+    
+    # Raw bowling totals
+    runs_conceded_total = Column(Integer, default=0)
+    balls_bowled_total = Column(Integer, default=0)
+    
+    # Derived bowling statistics
     bowling_average = Column(Float, default=0.0)
     economy_rate = Column(Float, default=0.0)
     best_bowling = Column(String(50), default="0/0")
@@ -76,3 +89,4 @@ class Match(Base):
 
     team_home = relationship("Team", foreign_keys=[team_home_id])
     team_away = relationship("Team", foreign_keys=[team_away_id])
+
